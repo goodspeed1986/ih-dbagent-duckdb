@@ -1,0 +1,7 @@
+{
+    "id":"duckdb",
+    "description":"Dbagent for Duckdb",
+    "cross":true,
+    "configfile":1, 
+    "version":"5.0.1"
+}

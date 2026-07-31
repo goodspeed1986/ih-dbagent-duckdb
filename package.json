@@ -1,0 +1,12 @@
+{
+  "name": "ih-dbagent-duckdb",
+  "version": "5.0.1",
+  "description": "Dbagent for Duckdb",
+  "main": "dbagent.js",
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.3-r.3",
+    "node-schedule": "^1.3.2"
+  },
+  "author": "INTRA",
+  "license": "MIT"
+}
