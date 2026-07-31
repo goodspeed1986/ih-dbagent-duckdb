@@ -1,8 +1,9 @@
 name: Build multi-platform release
 
-# Берёт ваш репозиторий, ставит зависимости (включая DuckDB),
-# подкладывает platform-specific bindings + extensions (quack, httpfs, json),
-# пакует архив на каждую ОС/архитектуру и (опционально) делает GitHub Release.
+# Берёт репозиторий, ставит зависимости проекта, для каждой платформы
+# скачивает нужный @duckdb/node-bindings-* через npm pack (без проверки os/cpu),
+# качает extensions quack/httpfs/json и пакует архив.
+# Всё крутится на ubuntu-latest — native runner для каждой ОС не нужен.
 
 on:
   workflow_dispatch:
@@ -32,12 +33,12 @@ permissions:
 
 env:
   EXTENSIONS: "quack httpfs json"
-  # что не класть в архив
   RSYNC_EXCLUDE: >-
     --exclude node_modules
     --exclude .git
     --exclude .github
     --exclude dist
+    --exclude out
     --exclude build
     --exclude coverage
     --exclude .env
@@ -53,50 +54,26 @@ jobs:
       matrix:
         p:
           - label: linux-x64
-            os: linux
-            cpu: x64
             bindings: "@duckdb/node-bindings-linux-x64"
             ext: linux_amd64
             archive: tar.gz
           - label: linux-arm64
-            os: linux
-            cpu: arm64
             bindings: "@duckdb/node-bindings-linux-arm64"
             ext: linux_arm64
             archive: tar.gz
-          - label: linux-x64-musl
-            os: linux
-            cpu: x64
-            bindings: "@duckdb/node-bindings-linux-x64-musl"
-            ext: linux_amd64_musl
-            archive: tar.gz
-          - label: linux-arm64-musl
-            os: linux
-            cpu: arm64
-            bindings: "@duckdb/node-bindings-linux-arm64-musl"
-            ext: linux_arm64_musl
-            archive: tar.gz
           - label: darwin-arm64
-            os: darwin
-            cpu: arm64
             bindings: "@duckdb/node-bindings-darwin-arm64"
             ext: osx_arm64
             archive: tar.gz
           - label: darwin-x64
-            os: darwin
-            cpu: x64
             bindings: "@duckdb/node-bindings-darwin-x64"
             ext: osx_amd64
             archive: tar.gz
           - label: win32-x64
-            os: win32
-            cpu: x64
             bindings: "@duckdb/node-bindings-win32-x64"
             ext: windows_amd64
             archive: zip
           - label: win32-arm64
-            os: win32
-            cpu: arm64
             bindings: "@duckdb/node-bindings-win32-arm64"
             ext: windows_arm64
             archive: zip
@@ -111,7 +88,7 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Resolve DuckDB bindings version
+      - name: Resolve versions
         id: ver
         run: |
           set -euo pipefail
@@ -119,7 +96,6 @@ jobs:
           EXT_VER="${{ inputs.extension_version }}"
 
           if [ "${{ github.event_name }}" = "push" ]; then
-            # tag v1.5.5 → extension 1.5.5, bindings 1.5.5-r.2 (эвристика)
             TAG="${GITHUB_REF_NAME#v}"
             EXT_VER="${TAG}"
             if [ -z "$INPUT_VER" ]; then
@@ -127,32 +103,25 @@ jobs:
             fi
           fi
 
-          # если версия bindings не задана — пробуем package.json
           if [ -z "$INPUT_VER" ] && [ -f package.json ]; then
             INPUT_VER=$(node -e "
               const p=require('./package.json');
-              const d=p.dependencies||{};
-              const o=p.optionalDependencies||{};
-              const v=d['@duckdb/node-api']||d['@duckdb/node-bindings']||d['duckdb']
-                     ||o['@duckdb/node-api']||o['@duckdb/node-bindings']||'';
-              console.log(v.replace(/^[\^~>=]*/,''));
+              const d={...(p.dependencies||{}),...(p.optionalDependencies||{}),...(p.devDependencies||{})};
+              const v=d['@duckdb/node-api']||d['@duckdb/node-bindings']||d['duckdb']||'';
+              console.log(String(v).replace(/^[\^~>=]*/,''));
             ")
           fi
 
-          if [ -z "$INPUT_VER" ]; then
-            INPUT_VER="1.5.5-r.2"
-          fi
+          [ -z "$INPUT_VER" ] && INPUT_VER="1.5.5-r.2"
           if [ -z "$EXT_VER" ]; then
-            # 1.5.5-r.2 → 1.5.5
             EXT_VER=$(echo "$INPUT_VER" | sed -E 's/-r\.[0-9]+$//')
           fi
 
           echo "bindings_version=${INPUT_VER}" >> "$GITHUB_OUTPUT"
           echo "extension_version=${EXT_VER}" >> "$GITHUB_OUTPUT"
-          echo "Bindings npm: ${INPUT_VER}"
-          echo "Extensions:   ${EXT_VER}"
+          echo "Bindings: ${INPUT_VER} | Extensions: ${EXT_VER}"
 
-      - name: npm install (project deps, ignore scripts)
+      - name: npm install (project deps only)
         run: |
           set -euo pipefail
           if [ -f package-lock.json ]; then
@@ -161,23 +130,38 @@ jobs:
             npm install --ignore-scripts
           fi
 
-      - name: Install platform DuckDB bindings
+      - name: Install meta @duckdb packages (platform-agnostic)
+        run: |
+          set -euo pipefail
+          VER="${{ steps.ver.outputs.bindings_version }}"
+          npm install --ignore-scripts --no-save \
+            "@duckdb/node-api@${VER}" \
+            "@duckdb/node-bindings@${VER}" 2>/dev/null || \
+          npm install --ignore-scripts --no-save \
+            "@duckdb/node-bindings@${VER}" || true
+          ls -la node_modules/@duckdb/ 2>/dev/null || true
+
+      - name: Fetch platform bindings via npm pack
         run: |
           set -euo pipefail
           VER="${{ steps.ver.outputs.bindings_version }}"
           PKG="${{ matrix.p.bindings }}"
+          TARGET="node_modules/${PKG}"
 
-          # Ставим meta-пакеты (если их ещё нет в package.json) + конкретную платформу
-          npm install --ignore-scripts --no-save \
-            "@duckdb/node-api@${VER}" \
-            "@duckdb/node-bindings@${VER}" \
-            "${PKG}@${VER}" || \
-          npm install --ignore-scripts --no-save \
-            "@duckdb/node-bindings@${VER}" \
-            "${PKG}@${VER}"
+          mkdir -p /tmp/duckdb-pack
+          cd /tmp/duckdb-pack
+          rm -rf ./*
+          echo "npm pack ${PKG}@${VER}"
+          npm pack "${PKG}@${VER}"
+          TARBALL=$(ls -1 *.tgz | head -1)
+          tar -xzf "$TARBALL"
 
-          echo "Installed ${PKG}@${VER}"
-          ls -la node_modules/@duckdb/ 2>/dev/null || true
+          rm -rf "${GITHUB_WORKSPACE}/${TARGET}"
+          mkdir -p "${GITHUB_WORKSPACE}/node_modules/@duckdb"
+          mv package "${GITHUB_WORKSPACE}/${TARGET}"
+
+          echo "Installed (packed) → ${TARGET}"
+          ls -la "${GITHUB_WORKSPACE}/${TARGET}" | head -20
 
       - name: Download DuckDB extensions
         run: |
@@ -206,14 +190,10 @@ jobs:
           OUT="out/${NAME}"
           mkdir -p "$OUT"
 
-          # 1) исходники проекта (без node_modules и мусора)
           rsync -a $RSYNC_EXCLUDE ./ "$OUT/"
 
-          # 2) node_modules целиком (уже с нужным platform-bindings)
-          #    для размера можно сузить до production, но проще полный snapshot
           if [ -d node_modules ]; then
             mkdir -p "$OUT/node_modules"
-            # копируем production-зависимости; @duckdb/* обязательно
             rsync -a \
               --exclude '.cache' \
               --exclude '**/docs' \
@@ -223,17 +203,21 @@ jobs:
               node_modules/ "$OUT/node_modules/"
           fi
 
-          # 3) расширения DuckDB
           mkdir -p "$OUT/duckdb_extensions"
           if ls duckdb_extensions/*.duckdb_extension 1>/dev/null 2>&1; then
             cp -a duckdb_extensions/*.duckdb_extension "$OUT/duckdb_extensions/"
           fi
 
-          # 4) манифест
+          # Оставляем только bindings текущей платформы
+          if [ -d "$OUT/node_modules/@duckdb" ]; then
+            find "$OUT/node_modules/@duckdb" -maxdepth 1 -type d -name 'node-bindings-*' \
+              ! -name "node-bindings-${{ matrix.p.label }}" \
+              -exec rm -rf {} + 2>/dev/null || true
+          fi
+
           cat > "$OUT/RELEASE.txt" << EOF
           project:    ${{ github.repository }}
           platform:   ${{ matrix.p.label }}
-          os/cpu:     ${{ matrix.p.os }}/${{ matrix.p.cpu }}
           bindings:   ${{ matrix.p.bindings }}@${{ steps.ver.outputs.bindings_version }}
           extensions: ${{ env.EXTENSIONS }}
           ext ver:    ${{ steps.ver.outputs.extension_version }}
@@ -241,17 +225,12 @@ jobs:
           commit:     ${{ github.sha }}
           built:      $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          Extensions path: ./duckdb_extensions/
-          Example:
-            INSTALL 'duckdb_extensions/quack.duckdb_extension';
-            LOAD quack;
-            INSTALL 'duckdb_extensions/httpfs.duckdb_extension';
-            LOAD httpfs;
-            INSTALL 'duckdb_extensions/json.duckdb_extension';
-            LOAD json;
+          Extensions: ./duckdb_extensions/
+            INSTALL 'duckdb_extensions/quack.duckdb_extension'; LOAD quack;
+            INSTALL 'duckdb_extensions/httpfs.duckdb_extension'; LOAD httpfs;
+            INSTALL 'duckdb_extensions/json.duckdb_extension'; LOAD json;
           EOF
 
-          echo "Tree size:"
           du -sh "$OUT" "$OUT/node_modules" "$OUT/duckdb_extensions" 2>/dev/null || true
 
       - name: Pack archive
@@ -320,15 +299,11 @@ jobs:
             |---------|----------|
             | `*-linux-x64.tar.gz` | Linux x64 (glibc) |
             | `*-linux-arm64.tar.gz` | Linux arm64 (glibc) |
-            | `*-linux-x64-musl.tar.gz` | Linux x64 (musl/Alpine) |
-            | `*-linux-arm64-musl.tar.gz` | Linux arm64 (musl) |
             | `*-darwin-arm64.tar.gz` | macOS Apple Silicon |
             | `*-darwin-x64.tar.gz` | macOS Intel |
             | `*-win32-x64.zip` | Windows x64 |
             | `*-win32-arm64.zip` | Windows arm64 |
 
-            В каждом архиве:
-            - исходники проекта + `node_modules` (с нужным `@duckdb/node-bindings-*`)
-            - `duckdb_extensions/*.duckdb_extension`
+            В каждом архиве: код + `node_modules` (нужный `@duckdb/node-bindings-*`) + `duckdb_extensions/`.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
