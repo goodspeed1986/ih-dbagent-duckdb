@@ -156,20 +156,22 @@ jobs:
           set -euo pipefail
           EXT_VER="${{ steps.ver.outputs.extension_version }}"
           PLAT="${{ matrix.p.ext }}"
-          mkdir -p duckdb_extensions
+          # Канонический путь DuckDB Neo: node_modules/@duckdb/extensions/<ver>/<platform>/
+          EXT_DIR="node_modules/@duckdb/extensions/v${EXT_VER}/${PLAT}"
+          mkdir -p "$EXT_DIR"
 
           for EXT in $EXTENSIONS; do
             URL="http://extensions.duckdb.org/v${EXT_VER}/${PLAT}/${EXT}.duckdb_extension.gz"
             echo "→ $URL"
-            if curl -fL --retry 3 --retry-delay 2 -o "duckdb_extensions/${EXT}.duckdb_extension.gz" "$URL"; then
-              gunzip -f "duckdb_extensions/${EXT}.duckdb_extension.gz"
+            if curl -fL --retry 3 --retry-delay 2 -o "${EXT_DIR}/${EXT}.duckdb_extension.gz" "$URL"; then
+              gunzip -f "${EXT_DIR}/${EXT}.duckdb_extension.gz"
               echo "  OK ${EXT}"
             else
               echo "::warning::${EXT} недоступен для ${PLAT} — пропуск"
-              rm -f "duckdb_extensions/${EXT}.duckdb_extension.gz"
+              rm -f "${EXT_DIR}/${EXT}.duckdb_extension.gz"
             fi
           done
-          ls -la duckdb_extensions/
+          ls -la "$EXT_DIR"
 
       - name: Assemble release tree
         run: |
@@ -191,11 +193,7 @@ jobs:
               node_modules/ "$OUT/node_modules/"
           fi
 
-          mkdir -p "$OUT/duckdb_extensions"
-          if ls duckdb_extensions/*.duckdb_extension 1>/dev/null 2>&1; then
-            cp -a duckdb_extensions/*.duckdb_extension "$OUT/duckdb_extensions/"
-          fi
-
+          # extensions уже в node_modules/@duckdb/extensions/v…/platform/
           if [ -d "$OUT/node_modules/@duckdb" ]; then
             find "$OUT/node_modules/@duckdb" -maxdepth 1 -type d -name 'node-bindings-*' \
               ! -name "node-bindings-${{ matrix.p.label }}" \
@@ -209,16 +207,14 @@ jobs:
           extensions: ${{ env.EXTENSIONS }}
           ext ver:    ${{ steps.ver.outputs.extension_version }}
           ext plat:   ${{ matrix.p.ext }}
+          ext path:   node_modules/@duckdb/extensions/v${{ steps.ver.outputs.extension_version }}/${{ matrix.p.ext }}/
           commit:     ${{ github.sha }}
           built:      $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-          Extensions: ./duckdb_extensions/
-            INSTALL 'duckdb_extensions/quack.duckdb_extension'; LOAD quack;
-            INSTALL 'duckdb_extensions/httpfs.duckdb_extension'; LOAD httpfs;
-            INSTALL 'duckdb_extensions/json.duckdb_extension'; LOAD json;
           EOF
 
-          du -sh "$OUT" "$OUT/node_modules" "$OUT/duckdb_extensions" 2>/dev/null || true
+          echo "Extensions tree:"
+          find "$OUT/node_modules/@duckdb/extensions" -type f 2>/dev/null | head -50 || true
+          du -sh "$OUT" "$OUT/node_modules" 2>/dev/null || true
 
       - name: Pack archive (zip)
         run: |
@@ -284,6 +280,6 @@ jobs:
             | `*-darwin-arm64.zip` | macOS Apple Silicon |
             | `*-win32-x64.zip` | Windows x64 |
 
-            В каждом архиве: код + `node_modules` (нужный `@duckdb/node-bindings-*`) + `duckdb_extensions/`.
+            В каждом архиве: код + `node_modules` (bindings + `@duckdb/extensions/v*/<platform>/`).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
