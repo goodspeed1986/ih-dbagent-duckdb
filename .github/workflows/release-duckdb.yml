@@ -2,7 +2,7 @@ name: Build multi-platform release
 
 # Берёт репозиторий, ставит зависимости проекта, для каждой платформы
 # скачивает нужный @duckdb/node-bindings-* через npm pack (без проверки os/cpu),
-# качает extensions quack/httpfs/json и пакует архив.
+# качает extensions quack/httpfs/json и пакует zip-архив.
 # Всё крутится на ubuntu-latest — native runner для каждой ОС не нужен.
 
 on:
@@ -56,27 +56,15 @@ jobs:
           - label: linux-x64
             bindings: "@duckdb/node-bindings-linux-x64"
             ext: linux_amd64
-            archive: tar.gz
           - label: linux-arm64
             bindings: "@duckdb/node-bindings-linux-arm64"
             ext: linux_arm64
-            archive: tar.gz
           - label: darwin-arm64
             bindings: "@duckdb/node-bindings-darwin-arm64"
             ext: osx_arm64
-            archive: tar.gz
-          - label: darwin-x64
-            bindings: "@duckdb/node-bindings-darwin-x64"
-            ext: osx_amd64
-            archive: tar.gz
           - label: win32-x64
             bindings: "@duckdb/node-bindings-win32-x64"
             ext: windows_amd64
-            archive: zip
-          - label: win32-arm64
-            bindings: "@duckdb/node-bindings-win32-arm64"
-            ext: windows_arm64
-            archive: zip
 
     steps:
       - name: Checkout
@@ -208,7 +196,6 @@ jobs:
             cp -a duckdb_extensions/*.duckdb_extension "$OUT/duckdb_extensions/"
           fi
 
-          # Оставляем только bindings текущей платформы
           if [ -d "$OUT/node_modules/@duckdb" ]; then
             find "$OUT/node_modules/@duckdb" -maxdepth 1 -type d -name 'node-bindings-*' \
               ! -name "node-bindings-${{ matrix.p.label }}" \
@@ -233,19 +220,14 @@ jobs:
 
           du -sh "$OUT" "$OUT/node_modules" "$OUT/duckdb_extensions" 2>/dev/null || true
 
-      - name: Pack archive
+      - name: Pack archive (zip)
         run: |
           set -euo pipefail
           NAME="${{ github.event.repository.name }}-${{ matrix.p.label }}"
           cd out
-          if [ "${{ matrix.p.archive }}" = "zip" ]; then
-            zip -r -q "${NAME}.zip" "$NAME"
-            echo "ARTIFACT=out/${NAME}.zip" >> "$GITHUB_ENV"
-          else
-            tar -czf "${NAME}.tar.gz" "$NAME"
-            echo "ARTIFACT=out/${NAME}.tar.gz" >> "$GITHUB_ENV"
-          fi
-          ls -lh "${NAME}".*
+          zip -r -q "${NAME}.zip" "$NAME"
+          echo "ARTIFACT=out/${NAME}.zip" >> "$GITHUB_ENV"
+          ls -lh "${NAME}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -282,7 +264,7 @@ jobs:
       - name: Collect files
         run: |
           mkdir -p release-files
-          find dist -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print -exec cp {} release-files/ \;
+          find dist -type f -name '*.zip' -print -exec cp {} release-files/ \;
           ls -lh release-files/
 
       - name: Publish release
@@ -297,12 +279,10 @@ jobs:
 
             | Archive | Platform |
             |---------|----------|
-            | `*-linux-x64.tar.gz` | Linux x64 (glibc) |
-            | `*-linux-arm64.tar.gz` | Linux arm64 (glibc) |
-            | `*-darwin-arm64.tar.gz` | macOS Apple Silicon |
-            | `*-darwin-x64.tar.gz` | macOS Intel |
+            | `*-linux-x64.zip` | Linux x64 (glibc) |
+            | `*-linux-arm64.zip` | Linux arm64 (glibc) |
+            | `*-darwin-arm64.zip` | macOS Apple Silicon |
             | `*-win32-x64.zip` | Windows x64 |
-            | `*-win32-arm64.zip` | Windows arm64 |
 
             В каждом архиве: код + `node_modules` (нужный `@duckdb/node-bindings-*`) + `duckdb_extensions/`.
         env:
