@@ -1,6 +1,6 @@
 {
   "name": "ih-dbagent-duckdb",
-  "version": "5.19.1",
+  "version": "5.19.2",
   "description": "Dbagent for Duckdb",
   "main": "dbagent.js",
   "dependencies": {
