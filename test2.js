@@ -5,7 +5,7 @@ async function main() {
   threads: '10'
 })           // или 'data.duckdb' для файла
   const conn = await db.connect();               // или db.run без connect в простых случаях
-
+  
   try {
     await conn.run(`
       CREATE TABLE IF NOT EXISTS records (

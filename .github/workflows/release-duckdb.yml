@@ -32,7 +32,7 @@ permissions:
   contents: write
 
 env:
-  EXTENSIONS: "quack httpfs json"
+  EXTENSIONS: "quack json"
   RSYNC_EXCLUDE: >-
     --exclude node_modules
     --exclude .git
@@ -271,7 +271,7 @@ jobs:
           generate_release_notes: true
           files: release-files/*
           body: |
-            Multi-platform build with DuckDB + extensions (`quack`, `httpfs`, `json`).
+            Multi-platform build with DuckDB + extensions (`quack`, `json`).
 
             | Archive | Platform |
             |---------|----------|

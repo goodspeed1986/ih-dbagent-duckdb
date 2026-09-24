@@ -17,7 +17,13 @@ const utils = require('./lib/utils');
 const logagent_main = require('./lib/logagentindex');
 
 try {
-  let opt = utils.getOptions(process.argv[2], 'logagent');
+  let opt;
+  try {
+    opt = JSON.parse(process.argv[2]); // dbPath property
+    // opt.dbLimit = 1024;
+  } catch (e) {
+    opt = {};
+  }
 
   const logfile = opt.logfile || path.join(__dirname, 'ih_postgresql_logagent.log');
   let loglevel = !opt.loglevel || isNaN(opt.loglevel) ? 0 : Number(opt.loglevel);
@@ -26,9 +32,6 @@ try {
   // console.log('Start logagent postgresql. Options: ' + JSON.stringify(opt));
   logger.log('Start logagent postgresql. Options: ' + JSON.stringify(opt));
 
-  if (opt.bxpwd) {
-    opt.password = utils.decryptBx(opt.bxpwd);
-  }
 
   delete opt.logfile;
   delete opt.loglevel;

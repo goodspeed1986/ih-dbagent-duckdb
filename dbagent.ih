@@ -2,6 +2,6 @@
     "id":"duckdb",
     "description":"Dbagent for Duckdb",
     "cross":true,
-    "configfile":1, 
-    "version":"5.0.1"
+    "configfile":0, 
+    "version":"5.19.1"
 }

@@ -11,7 +11,13 @@ const logger = require('./logger');
 const utils = require('./lib/utils');
 
 try {
-  let opt = utils.getOptions(process.argv[2], 'dbagent');
+  let opt;
+  try {
+    opt = JSON.parse(process.argv[2]); // dbPath property
+    // opt.dbLimit = 1024;
+  } catch (e) {
+    opt = {};
+  }
 
   const logfile = opt.logfile || path.join(__dirname, 'ih_duckdb.log');
   let loglevel = !opt.loglevel || isNaN(opt.loglevel) ? 0 : Number(opt.loglevel);
@@ -21,9 +27,7 @@ try {
   // console.log('Start dbagent postgreSql. Options: ' + JSON.stringify(opt));
   logger.log('Start dbagent Duckdb. Options: ' + JSON.stringify(opt));
 
-  if (opt.bxpwd) {
-    opt.password = utils.decryptBx(opt.bxpwd);
-  }
+
 
   delete opt.logfile;
   delete opt.loglevel;
