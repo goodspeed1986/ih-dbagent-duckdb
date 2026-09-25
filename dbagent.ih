@@ -3,5 +3,5 @@
     "description":"Dbagent for Duckdb",
     "cross":true,
     "configfile":0, 
-    "version":"5.19.5"
+    "version":"5.19.6"
 }
