@@ -27,7 +27,10 @@
     { "prop": "active", "title": "Active", "type": "text", "hide": "1==1" },
     { "prop": "project_options", "title": "Параметры проекта", "type": "header", "size": "h6" },
     { "prop": "dbLimit", "title": "Лимит в МБ", "type": "input", "default": 1024},
-    { "prop": "alone", "title": "Хранить БД отдельно от проекта", "type": "cb" },
+    { "prop": "memLimit", "title": "Лимит оперативной памяти в ГБ", "type": "input", "default": 2},
+    { "prop": "threads", "title": "Количество потоков", "type": "input", "default": 2},
+    { "prop": "preserve", "title": "Сохранение порядка строк при запросах", "type": "cb", "default": 1},
+    { "prop": "alone", "title": "Хранить БД отдельно от проекта", "type": "cb", "hide": "1==1" },
     { "prop": "alonePath", "title": "Путь к папке для БД", "type": "input", "hide": "!data.p3.alone" },
     { "prop": "loglevel", "title": "$LogLevel", "type": "droplist", "data": "loglevelList" }
   ],
