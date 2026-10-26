@@ -2,20 +2,20 @@ name: Build multi-platform release
 
 # Берёт репозиторий, ставит зависимости проекта, для каждой платформы
 # скачивает нужный @duckdb/node-bindings-* через npm pack (без проверки os/cpu),
-# качает extensions quack/httpfs/json и пакует zip-архив.
+# качает extensions quack/json и пакует zip-архив.
 # Всё крутится на ubuntu-latest — native runner для каждой ОС не нужен.
 
 on:
   workflow_dispatch:
     inputs:
       duckdb_version:
-        description: "Версия @duckdb/* на npm (например 1.5.5-r.2). Пусто = из package.json"
+        description: "Версия @duckdb/* на npm (например 2.0.0-r.1). Пусто = из package.json"
         required: false
         default: ""
       extension_version:
-        description: "Версия DuckDB для extensions.duckdb.org (например 1.5.5)"
+        description: "Версия DuckDB для extensions.duckdb.org (например 2.0.0)"
         required: true
-        default: "1.5.5"
+        default: "2.0.0"
       create_release:
         description: "Создать GitHub Release"
         type: boolean
@@ -87,7 +87,7 @@ jobs:
             TAG="${GITHUB_REF_NAME#v}"
             EXT_VER="${TAG}"
             if [ -z "$INPUT_VER" ]; then
-              INPUT_VER="${TAG}-r.2"
+              INPUT_VER="${TAG}-r.1"
             fi
           fi
 
@@ -100,7 +100,7 @@ jobs:
             ")
           fi
 
-          [ -z "$INPUT_VER" ] && INPUT_VER="1.5.5-r.2"
+          [ -z "$INPUT_VER" ] && INPUT_VER="2.0.0-r.1"
           if [ -z "$EXT_VER" ]; then
             EXT_VER=$(echo "$INPUT_VER" | sed -E 's/-r\.[0-9]+$//')
           fi
@@ -193,7 +193,6 @@ jobs:
               node_modules/ "$OUT/node_modules/"
           fi
 
-          # extensions уже в node_modules/@duckdb/extensions/v…/platform/
           if [ -d "$OUT/node_modules/@duckdb" ]; then
             find "$OUT/node_modules/@duckdb" -maxdepth 1 -type d -name 'node-bindings-*' \
               ! -name "node-bindings-${{ matrix.p.label }}" \
@@ -271,7 +270,7 @@ jobs:
           generate_release_notes: true
           files: release-files/*
           body: |
-            Multi-platform build with DuckDB + extensions (`quack`, `json`).
+            Multi-platform build with DuckDB 2.0 + extensions (`quack`, `json`).
 
             | Archive | Platform |
             |---------|----------|
@@ -280,6 +279,6 @@ jobs:
             | `*-darwin-arm64.zip` | macOS Apple Silicon |
             | `*-win32-x64.zip` | Windows x64 |
 
-            В каждом архиве: код + `node_modules` (bindings + `@duckdb/extensions/v*/<platform>/`).
+            В каждом архиве: код + `node_modules` (bindings + `@duckdb/extensions/v2.0.0/<platform>/`).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
